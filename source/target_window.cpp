@@ -25,10 +25,10 @@ const wchar_t* TargetWindow::GetClassName()
 TargetWindow::TargetWindow()
     : CWnd()
     , background_opacity_(1.0f)
-    , copy_background_(true)
+    , copy_background_(false)
     , perform_abs_(true)
     , reverse_contrast_(true)
-    , use_background_opacity_(true)
+    , use_background_opacity_(false)
 {
 }
 
@@ -65,7 +65,7 @@ void TargetWindow::Paint(float opacity)
         if (canvas.GetBitmap(&details) != sizeof(details))
             return;
 
-        COLORREF backgroundColor = RGB(236, 165, 73) |
+        COLORREF backgroundColor = RGB(236, 161, 0) |
             (static_cast<uint32_t>(opacity * 255) << 24);
 
         const int bufferSize = details.bmHeight * details.bmWidthBytes;
@@ -104,6 +104,21 @@ LRESULT TargetWindow::MyWinProc(HWND hwnd, uint32_t message, WPARAM wParam,
                                 LPARAM lParam)
 {
     return ::DefWindowProc(hwnd, message, wParam, lParam);
+}
+
+void TargetWindow::ApplyOpacity(int8_t* contrastBuffer, int bufferSize,
+                                const int8_t* opacityBuffer)
+{
+    uint32_t const* const opacityPointer =
+        reinterpret_cast<uint32_t const* const>(opacityBuffer);
+    uint32_t* const contrastPointer =
+        reinterpret_cast<uint32_t*>(contrastBuffer);
+
+    for (auto i = contrastPointer;
+            i != contrastPointer + bufferSize / sizeof(*i); ++i) {
+        const uint32_t& opacityRef = *(opacityPointer + (i - contrastPointer));
+        *i = (*i & 0x00FFFFFF) | opacityRef;
+    }
 }
 
 void TargetWindow::BlendContrastBuffer(CBitmap* canvas,
@@ -166,74 +181,80 @@ void TargetWindow::BlendContrastBuffer(CBitmap* canvas,
 }
 
 void TargetWindow::CalculateOpacity(int8_t* opacityBuffer, int bufferSize,
-                                    const int8_t* contrastBuffer)
+                                    const int8_t* contrastBuffer,
+                                    COLORREF backgroundColor,
+                                    COLORREF textColor)
 {
-//     uint32_t const* const contrastPointer =
-//         reinterpret_cast<uint32_t*>(contrastBuffer);
-//     uint32_t* const opacityPointer =
-//         reinterpret_cast<uint32_t*>(opacityBuffer);
-//     const uint32_t backgroundColorNoAlpha = backgroundColor & 0x00FFFFFF;
-//     for (int i = 0; i != myDetails.bmHeight; ++i) {
-//         for (int j = 0; j != myDetails.bmWidth; ++j) {
-//             uint32_t& r = *(reinterpret_cast<uint32_t*>(
-//                 contrastBuffer.get() + myDetails.bmWidthBytes * i) + j);
-// 
-//             uint32_t v = r & 0x00FFFFFF;
-//             if (v == contrastBackground) {
-//                 // Outside the region that the glyph rendered.
-//                 r = v;
-//             } else if (v == textColor) {
-//                 // Opaque pixels of the glyph.
-//                 r |= 0xFF000000;
-//             } else {
-//                 // Pixels with Opacity.
-// 
-//                 // Recalculate the opacity according to the Apple ClearType opacity
-//                 // equation.
-//                 const float textRed = static_cast<float>(GetRValue(textColor));
-//                 const float textGreen =
-//                     static_cast<float>(GetGValue(textColor));
-//                 const float textBlue = static_cast<float>(GetBValue(textColor));
-// 
-//                 const float backgroundRed =
-//                     static_cast<float>(GetRValue(backgroundColor));
-//                 const float backgroundGreen =
-//                     static_cast<float>(GetGValue(backgroundColor));
-//                 const float backgroundBlue =
-//                     static_cast<float>(GetBValue(backgroundColor));
-// 
-//                 const float contrastRed = static_cast<float>(GetRValue(v));
-//                 const float contrastGreen = static_cast<float>(GetGValue(v));
-//                 const float contrastBlue = static_cast<float>(GetBValue(v));
-// 
-//                 float red = GetRValue(textColor) == GetRValue(backgroundColor) ?
-//                     1.0f :
-//                     ((contrastRed - backgroundRed) / (textRed - backgroundRed));
-//                 float green =
-//                     GetGValue(textColor) == GetGValue(backgroundColor) ?
-//                         1.0f :
-//                         ((contrastGreen - backgroundGreen) /
-//                             (textGreen - backgroundGreen));
-//                 float blue =
-//                     GetBValue(textColor) == GetBValue(backgroundColor) ?
-//                         1.0f :
-//                         ((contrastBlue - backgroundBlue) /
-//                             (textBlue - backgroundBlue));
-// 
-//                 if (perform_abs_) {
-//                     red = abs(red);
-//                     green = abs(green);
-//                     blue = abs(blue);
-//                 }
-// 
-//                 float opacity = 0.299f * red + 0.587f * green + 0.114f * blue;
-//                 //opacity = min(1.0f, opacity);
-//                 //opacity = 0.9f;
-// 
-//                 r |= static_cast<uint32_t>(opacity * 255.0f) << 24 | v;
-//             }
-//         }
-//     }
+    uint32_t const* const contrastPointer =
+        reinterpret_cast<uint32_t const* const>(contrastBuffer);
+    uint32_t* const opacityPointer =
+        reinterpret_cast<uint32_t*>(opacityBuffer);
+    const uint32_t backgroundColorNoAlpha = backgroundColor & 0x00FFFFFF;
+
+    for (auto i = contrastPointer;
+            i != contrastPointer + bufferSize / sizeof(*i); ++i) {
+        uint32_t& opacityRef = *(opacityPointer + (i - contrastPointer));
+
+        uint32_t v = *i & 0x00FFFFFF;
+        if (v == backgroundColorNoAlpha) {
+            // Outside the region that the glyph rendered.
+            opacityRef = 0x00000000;
+        } else if (v == textColor) {
+            // Opaque pixels of the glyph.
+            opacityRef = 0xFF000000;
+        } else {
+            // Pixels with Opacity.
+
+            // Recalculate the opacity according to the Apple ClearType opacity
+            // equation.
+            const float textRed = static_cast<float>(GetRValue(textColor));
+            const float textGreen =
+                static_cast<float>(GetGValue(textColor));
+            const float textBlue = static_cast<float>(GetBValue(textColor));
+
+            const float backgroundRed =
+                static_cast<float>(GetRValue(backgroundColor));
+            const float backgroundGreen =
+                static_cast<float>(GetGValue(backgroundColor));
+            const float backgroundBlue =
+                static_cast<float>(GetBValue(backgroundColor));
+
+            const float contrastRed = static_cast<float>(GetRValue(v));
+            const float contrastGreen = static_cast<float>(GetGValue(v));
+            const float contrastBlue = static_cast<float>(GetBValue(v));
+
+            float red = GetRValue(textColor) == GetRValue(backgroundColor) ?
+                1.0f :
+                ((contrastRed - backgroundRed) / (textRed - backgroundRed));
+            float green =
+                GetGValue(textColor) == GetGValue(backgroundColor) ?
+                    1.0f :
+                    ((contrastGreen - backgroundGreen) /
+                        (textGreen - backgroundGreen));
+            float blue =
+                GetBValue(textColor) == GetBValue(backgroundColor) ?
+                    1.0f :
+                    ((contrastBlue - backgroundBlue) /
+                        (textBlue - backgroundBlue));
+
+            if (perform_abs_) {
+                red = abs(red);
+                green = abs(green);
+                blue = abs(blue);
+            }
+
+            red = red > 0.5f ? sqrt(red) : red * red;
+            green = green > 0.5f ? sqrt(green) : green * green;
+            blue = blue > 0.5f ? sqrt(blue) : blue * blue;
+
+//                 red = red + (1.0f - red) * background_opacity_;
+//                 green = green + (1.0f - green) * background_opacity_;
+//                 blue = blue + (1.0f - blue) * background_opacity_;
+
+            float opacity = 1.0f;//0.299f * red + 0.587f * green + 0.114f * blue;
+            opacityRef = static_cast<uint32_t>(opacity * 255.0f) << 24;
+        }
+    }
 }
 
 void TargetWindow::PrepareContrastBuffer(int8_t* contrastBuffer,
@@ -333,6 +354,7 @@ void TargetWindow::RenderClearTypeGlyph(CBitmap* canvas, CDC* dc,
     wstring fontName(L"Î¢ÈíÑÅºÚ");
     LOGFONTW fontDetails = { 0 };
     fontDetails.lfHeight = -12;
+    fontDetails.lfQuality = CLEARTYPE_NATURAL_QUALITY;
     std::copy(fontName.begin(), fontName.end(), fontDetails.lfFaceName);
     CFont font;
     if (!font.CreateFontIndirectW(&fontDetails))
@@ -387,87 +409,106 @@ void TargetWindow::RenderClearTypeGlyph(CBitmap* canvas, CDC* dc,
                                                              selectOldFont);
 
     CRect textBounds(bounds);
-    memDC.GetDC().DrawText(L"Àí", &textBounds, DT_NOPREFIX | DT_VCENTER);
+    memDC.GetDC().DrawText(L"¹Ü", &textBounds, DT_NOPREFIX | DT_VCENTER);
     contrast.GetBitmapBits(contrastBufferSize, contrastBuffer.get());
 
-    // DrawText() will fill all the opacity value with 0. That's why we are gonna
-    // recalculate the opacity value.
-    uint32_t* const int32Pointer =
-        reinterpret_cast<uint32_t*>(contrastBuffer.get());
-    const uint32_t backgroundColorNoAlpha = backgroundColor & 0x00FFFFFF;
-    for (int i = 0; i != myDetails.bmHeight; ++i) {
-        for (int j = 0; j != myDetails.bmWidth; ++j) {
-            uint32_t& r = *(reinterpret_cast<uint32_t*>(
-                contrastBuffer.get() + myDetails.bmWidthBytes * i) + j);
+    // A buffer to store the opacity values..
+    const int opacityBufferSize = contrastBufferSize;
+    unique_ptr<int8_t[]> opacityBuffer(new int8_t[opacityBufferSize]);
+    CalculateOpacity(opacityBuffer.get(), opacityBufferSize,
+                     contrastBuffer.get(), contrastBackground, textColor);
 
-            uint32_t v = r & 0x00FFFFFF;
-            if (v == contrastBackground) {
-                // Outside the region that the glyph rendered.
-                r = v;
-            } else if (v == textColor) {
-                // Opaque pixels of the glyph.
-                r |= 0xFF000000;
-            } else {
-                // Pixels with Opacity.
-
-                // Recalculate the opacity according to the Apple ClearType
-                // opacity equation.
-                const float textRed = static_cast<float>(GetRValue(textColor));
-                const float textGreen =
-                    static_cast<float>(GetGValue(textColor));
-                const float textBlue = static_cast<float>(GetBValue(textColor));
-
-                const float backgroundRed =
-                    static_cast<float>(GetRValue(backgroundColor));
-                const float backgroundGreen =
-                    static_cast<float>(GetGValue(backgroundColor));
-                const float backgroundBlue =
-                    static_cast<float>(GetBValue(backgroundColor));
-
-                const float contrastRed = static_cast<float>(GetRValue(v));
-                const float contrastGreen = static_cast<float>(GetGValue(v));
-                const float contrastBlue = static_cast<float>(GetBValue(v));
-
-                float reviseFactor =
-                    (textRed - contrastRed) * background_opacity_;
-                reviseFactor = 0;
-                float red = GetRValue(textColor) == GetRValue(backgroundColor) ?
-                    1.0f :
-                    ((contrastRed + reviseFactor - backgroundRed) /
-                        (textRed - backgroundRed));
-
-                reviseFactor =
-                    (textGreen - contrastGreen) * background_opacity_;
-                reviseFactor = 0;
-                float green =
-                    GetGValue(textColor) == GetGValue(backgroundColor) ?
-                        1.0f :
-                        ((contrastGreen + reviseFactor - backgroundGreen) /
-                            (textGreen - backgroundGreen));
-
-                reviseFactor = (textBlue - contrastBlue) * background_opacity_;
-                reviseFactor = 0;
-                float blue =
-                    GetBValue(textColor) == GetBValue(backgroundColor) ?
-                        1.0f :
-                        ((contrastBlue + reviseFactor - backgroundBlue) /
-                            (textBlue - backgroundBlue));
-
-                if (perform_abs_) {
-                    red = abs(red);
-                    green = abs(green);
-                    blue = abs(blue);
-                }
-
-                float opacity = (0.299f * red + 0.587f * green + 0.114f * blue);
-                //opacity = min(1.0f, opacity);
-                //opacity = 0.9f;
-
-                r = static_cast<uint32_t>(opacity * 255.0f) << 24 | v;
-            }
-        }
-    }
+    // Copy the background into the contrast buffer and perform the actual
+    // rendering.
+    copy_background_ = true;
+    PrepareContrastBuffer(contrastBuffer.get(), myDetails, canvasBuffer.get(),
+                          details, backgroundColor, textColor,
+                          &contrastBackground);
     contrast.SetBitmapBits(contrastBufferSize, contrastBuffer.get());
+    memDC.GetDC().DrawText(L"¹Ü", &textBounds, DT_NOPREFIX | DT_VCENTER);
+    contrast.GetBitmapBits(contrastBufferSize, contrastBuffer.get());
+
+    ApplyOpacity(contrastBuffer.get(), contrastBufferSize, opacityBuffer.get());
+    contrast.SetBitmapBits(contrastBufferSize, contrastBuffer.get());
+//     uint32_t* const int32Pointer =
+//         reinterpret_cast<uint32_t*>(contrastBuffer.get());
+//     const uint32_t backgroundColorNoAlpha = backgroundColor & 0x00FFFFFF;
+//     for (int i = 0; i != myDetails.bmHeight; ++i) {
+//         for (int j = 0; j != myDetails.bmWidth; ++j) {
+//             uint32_t& r = *(reinterpret_cast<uint32_t*>(
+//                 contrastBuffer.get() + myDetails.bmWidthBytes * i) + j);
+// 
+//             uint32_t v = r & 0x00FFFFFF;
+//             if (v == contrastBackground) {
+//                 // Outside the region that the glyph rendered.
+//                 r = v;
+//             } else if (v == textColor) {
+//                 // Opaque pixels of the glyph.
+//                 r |= 0xFF000000;
+//             } else {
+//                 // Pixels with Opacity.
+// 
+//                 // Recalculate the opacity according to the Apple ClearType
+//                 // opacity equation.
+//                 const float textRed = static_cast<float>(GetRValue(textColor));
+//                 const float textGreen =
+//                     static_cast<float>(GetGValue(textColor));
+//                 const float textBlue = static_cast<float>(GetBValue(textColor));
+// 
+//                 const float backgroundRed =
+//                     static_cast<float>(GetRValue(backgroundColor));
+//                 const float backgroundGreen =
+//                     static_cast<float>(GetGValue(backgroundColor));
+//                 const float backgroundBlue =
+//                     static_cast<float>(GetBValue(backgroundColor));
+// 
+//                 const float contrastRed = static_cast<float>(GetRValue(v));
+//                 const float contrastGreen = static_cast<float>(GetGValue(v));
+//                 const float contrastBlue = static_cast<float>(GetBValue(v));
+// 
+//                 float reviseFactor =
+//                     (textRed - contrastRed) * background_opacity_;
+//                 reviseFactor = 0;
+//                 float red = GetRValue(textColor) == GetRValue(backgroundColor) ?
+//                     1.0f :
+//                     ((contrastRed + reviseFactor - backgroundRed) /
+//                         (textRed - backgroundRed));
+// 
+//                 reviseFactor =
+//                     (textGreen - contrastGreen) * background_opacity_;
+//                 reviseFactor = 0;
+//                 float green =
+//                     GetGValue(textColor) == GetGValue(backgroundColor) ?
+//                         1.0f :
+//                         ((contrastGreen + reviseFactor - backgroundGreen) /
+//                             (textGreen - backgroundGreen));
+// 
+//                 reviseFactor = (textBlue - contrastBlue) * background_opacity_;
+//                 reviseFactor = 0;
+//                 float blue =
+//                     GetBValue(textColor) == GetBValue(backgroundColor) ?
+//                         1.0f :
+//                         ((contrastBlue + reviseFactor - backgroundBlue) /
+//                             (textBlue - backgroundBlue));
+// 
+//                 if (perform_abs_) {
+//                     red = sqrt(abs(red));
+//                     green = sqrt(abs(green));
+//                     blue = sqrt(abs(blue));
+// 
+//                     red = red + (1.0f - red) * background_opacity_;
+//                     green = green + (1.0f - green) * background_opacity_;
+//                     blue = blue + (1.0f - blue) * background_opacity_;
+//                 }
+// 
+//                 float opacity = (0.299f * red + 0.587f * green + 0.114f * blue);
+//                 //opacity = min(1.0f, opacity);
+//                 //opacity = 0.9f;
+// 
+//                 r = static_cast<uint32_t>(opacity * 255.0f) << 24 | v;
+//             }
+//         }
+//     }
 
     // Render the contrast buffer into canvas.
     BlendContrastBuffer(canvas, details, contrast, myDetails);

@@ -17,11 +17,14 @@ private:
     static LRESULT __stdcall MyWinProc(HWND hwnd, uint32_t message,
                                        WPARAM wParam, LPARAM lParam);
 
+    void ApplyOpacity(int8_t* contrastBuffer, int bufferSize,
+                      const int8_t* opacityBuffer);
     void BlendContrastBuffer(CBitmap* canvas, const BITMAP& canvasDetails,
                              const CBitmap& contrast,
                              const BITMAP& contrastDetails);
     void CalculateOpacity(int8_t* opacityBuffer, int bufferSize,
-                          const int8_t* contrastBuffer);
+                          const int8_t* contrastBuffer,
+                          COLORREF backgroundColor, COLORREF textColor);
     void PrepareContrastBuffer(int8_t* contrastBuffer,
                                const BITMAP& contrastDetails,
                                const int8_t* canvasBuffer,
