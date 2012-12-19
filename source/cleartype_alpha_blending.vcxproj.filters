@@ -1,0 +1,35 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClInclude Include="resource.h" />
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="target_window.h" />
+    <ClInclude Include="targetver.h" />
+    <ClInclude Include="cleartype_alpha_blending.h" />
+    <ClInclude Include="cleartype_alpha_blending_dialog.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="stdafx.cpp" />
+    <ClCompile Include="target_window.cpp" />
+    <ClCompile Include="cleartype_alpha_blending.cpp" />
+    <ClCompile Include="cleartype_alpha_blending_dialog.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="%28resource_files%29">
+      <UniqueIdentifier>{2d771413-2d2b-440f-8d2d-252e9c672a3b}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="cleartype_alpha_blending.rc">
+      <Filter>%28resource_files%29</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="res\cleartype_alpha_blending.ico">
+      <Filter>%28resource_files%29</Filter>
+    </None>
+    <None Include="res\cleartype_alpha_blending.rc2">
+      <Filter>%28resource_files%29</Filter>
+    </None>
+  </ItemGroup>
+</Project>
