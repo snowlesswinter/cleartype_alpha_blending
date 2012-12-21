@@ -28,7 +28,7 @@ TargetWindow::TargetWindow()
     , copy_background_(false)
     , perform_abs_(true)
     , reverse_contrast_(true)
-    , use_background_opacity_(false)
+    , use_background_opacity_(true)
 {
 }
 
@@ -65,7 +65,7 @@ void TargetWindow::Paint(float opacity)
         if (canvas.GetBitmap(&details) != sizeof(details))
             return;
 
-        COLORREF backgroundColor = RGB(236, 161, 0) |
+        COLORREF backgroundColor = RGB(236, 128, 60) |//RGB(255, 255, 255)
             (static_cast<uint32_t>(opacity * 255) << 24);
 
         const int bufferSize = details.bmHeight * details.bmWidthBytes;
@@ -152,29 +152,21 @@ void TargetWindow::BlendContrastBuffer(CBitmap* canvas,
             const float contrastGreen = static_cast<float>(GetGValue(c));
             const float contrastBlue = static_cast<float>(GetBValue(c));
 
-            const float canvasRed = static_cast<float>(GetRValue(r));
-            const float canvasGreen = static_cast<float>(GetGValue(r));
-            const float canvasBlue = static_cast<float>(GetBValue(r));
-
-            const uint32_t red = static_cast<uint32_t>(
-                contrastOpacity * contrastRed +
-                    (1.0f - contrastOpacity) * canvasRed);
-            const uint32_t green = static_cast<uint32_t>(
-                contrastOpacity * contrastGreen +
-                    (1.0f - contrastOpacity) * canvasGreen);
-            const uint32_t blue = static_cast<uint32_t>(
-                contrastOpacity * contrastBlue +
-                    (1.0f - contrastOpacity) * canvasBlue);
-            float opacity = 1.0f;
-            if ((c & 0xFF000000) != 0xFF000000) {
+            const uint32_t alpha = (c & 0xFF000000) >> 24;
+            if (!alpha) {
+                // Use background color only.
+            } else if (alpha == 255) {
+                // Use contrast color only.
+                r = 0xFF000000 | RGB(contrastRed, contrastGreen, contrastBlue);
+            } else {
                 const float canvasOpacity = static_cast<float>(
                     (r & 0xFF000000) >> 24) / 255.0f;
-                opacity = contrastOpacity * contrastOpacity +
+                const float opacity = contrastOpacity * contrastOpacity +
                     (1.0f - contrastOpacity) * canvasOpacity;
-            }
 
-            r = static_cast<uint32_t>(opacity * 255.0f) << 24 |
-                RGB(red, green, blue);
+                r = static_cast<uint32_t>(opacity * 255.0f) << 24 |
+                    RGB(contrastRed, contrastGreen, contrastBlue);
+            }
         }
     }
     canvas->SetBitmapBits(canvasBufferSize, canvasBuffer.get());
@@ -247,11 +239,11 @@ void TargetWindow::CalculateOpacity(int8_t* opacityBuffer, int bufferSize,
             green = green > 0.5f ? sqrt(green) : green * green;
             blue = blue > 0.5f ? sqrt(blue) : blue * blue;
 
-//                 red = red + (1.0f - red) * background_opacity_;
-//                 green = green + (1.0f - green) * background_opacity_;
-//                 blue = blue + (1.0f - blue) * background_opacity_;
+            red = red + (1.0f - red) * background_opacity_;
+            green = green + (1.0f - green) * background_opacity_;
+            blue = blue + (1.0f - blue) * background_opacity_;
 
-            float opacity = 1.0f;//0.299f * red + 0.587f * green + 0.114f * blue;
+            float opacity = 0.299f * red + 0.587f * green + 0.114f * blue;
             opacityRef = static_cast<uint32_t>(opacity * 255.0f) << 24;
         }
     }
@@ -296,9 +288,9 @@ void TargetWindow::PrepareContrastBuffer(int8_t* contrastBuffer,
                     const float backgroundBlue =
                         static_cast<float>(GetBValue(backgroundColor));
 
-                    const float cr = static_cast<float>(GetRValue(textColor));
-                    const float cg = static_cast<float>(GetGValue(textColor));
-                    const float cb = static_cast<float>(GetBValue(textColor));
+                    const float cr = textRed; // backgroundRed;
+                    const float cg = textGreen; // backgroundGreen;
+                    const float cb = textBlue; // backgroundBlue;
                     const uint32_t gray = static_cast<uint32_t>(
                         0.299f * cr + 0.587f * cg + 0.114f * cb);
 
@@ -409,7 +401,7 @@ void TargetWindow::RenderClearTypeGlyph(CBitmap* canvas, CDC* dc,
                                                              selectOldFont);
 
     CRect textBounds(bounds);
-    memDC.GetDC().DrawText(L"管", &textBounds, DT_NOPREFIX | DT_VCENTER);
+    memDC.GetDC().DrawText(L"理", &textBounds, DT_NOPREFIX | DT_VCENTER);
     contrast.GetBitmapBits(contrastBufferSize, contrastBuffer.get());
 
     // A buffer to store the opacity values..
@@ -425,7 +417,7 @@ void TargetWindow::RenderClearTypeGlyph(CBitmap* canvas, CDC* dc,
                           details, backgroundColor, textColor,
                           &contrastBackground);
     contrast.SetBitmapBits(contrastBufferSize, contrastBuffer.get());
-    memDC.GetDC().DrawText(L"管", &textBounds, DT_NOPREFIX | DT_VCENTER);
+    memDC.GetDC().DrawText(L"理", &textBounds, DT_NOPREFIX | DT_VCENTER);
     contrast.GetBitmapBits(contrastBufferSize, contrastBuffer.get());
 
     ApplyOpacity(contrastBuffer.get(), contrastBufferSize, opacityBuffer.get());
@@ -502,8 +494,6 @@ void TargetWindow::RenderClearTypeGlyph(CBitmap* canvas, CDC* dc,
 //                 }
 // 
 //                 float opacity = (0.299f * red + 0.587f * green + 0.114f * blue);
-//                 //opacity = min(1.0f, opacity);
-//                 //opacity = 0.9f;
 // 
 //                 r = static_cast<uint32_t>(opacity * 255.0f) << 24 | v;
 //             }

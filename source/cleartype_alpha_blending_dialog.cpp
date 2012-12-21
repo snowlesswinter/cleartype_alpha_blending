@@ -112,7 +112,7 @@ BOOL CleartypeAlphaBlendingDialog::OnInitDialog()
     target_window_->CreateEx(exStyle, TargetWindow::GetClassName(),
                              L"Target Window", WS_VISIBLE | WS_POPUP, bounds,
                              nullptr, 0, nullptr);
-    target_window_->Paint(0.0f);
+    target_window_->Paint(1.0f);
 
     return TRUE;  // return TRUE  unless you set the focus to a control
 }
